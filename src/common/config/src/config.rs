@@ -759,18 +759,64 @@ fn default_kafka_tcp_port() -> u32 {
     9092
 }
 
+fn default_kafka_max_fetch_bytes() -> u32 {
+    4 * 1024 * 1024
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct KafkaRuntime {
     #[serde(default = "default_kafka_tcp_port")]
     pub tcp_port: u32,
+    /// Upper bound (per partition) on how many bytes a Fetch response may
+    /// return, regardless of what the client requests via `max_bytes`/
+    /// `partition_max_bytes`.
+    #[serde(default = "default_kafka_max_fetch_bytes")]
+    pub max_fetch_bytes: u32,
+    /// Upper bound on how many partitions a single DescribeTopicPartitions
+    /// response may return, regardless of the client's `response_partition_limit`.
+    #[serde(default = "default_kafka_max_describe_topic_partitions")]
+    pub max_describe_topic_partitions: u32,
+    #[serde(default)]
+    pub sasl: KafkaSasl,
 }
 
 impl Default for KafkaRuntime {
     fn default() -> Self {
         KafkaRuntime {
             tcp_port: default_kafka_tcp_port(),
+            max_fetch_bytes: default_kafka_max_fetch_bytes(),
+            max_describe_topic_partitions: default_kafka_max_describe_topic_partitions(),
+            sasl: KafkaSasl::default(),
         }
     }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct KafkaSasl {
+    /// When false (the default) connections are accepted without authentication
+    /// and the SASL handshake/authenticate handlers stay inert.
+    #[serde(default)]
+    pub enabled: bool,
+    /// SASL mechanisms the broker offers, e.g. ["SCRAM-SHA-256", "SCRAM-SHA-512"].
+    #[serde(default = "default_kafka_sasl_mechanisms")]
+    pub mechanisms: Vec<String>,
+}
+
+impl Default for KafkaSasl {
+    fn default() -> Self {
+        KafkaSasl {
+            enabled: false,
+            mechanisms: default_kafka_sasl_mechanisms(),
+        }
+    }
+}
+
+fn default_kafka_sasl_mechanisms() -> Vec<String> {
+    vec!["SCRAM-SHA-256".to_string(), "SCRAM-SHA-512".to_string()]
+}
+
+fn default_kafka_max_describe_topic_partitions() -> u32 {
+    2000
 }
 
 fn default_amqp_tcp_port() -> u32 {
