@@ -73,17 +73,25 @@ pub async fn process_metadata(
 pub async fn process_describe_cluster(
     broker_cache: &Arc<NodeCacheManager>,
     sdm: &Arc<StorageDriverManager>,
-    _req: &DescribeClusterRequest,
+    req: &DescribeClusterRequest,
 ) -> Option<KafkaPacket> {
     let brokers = build_cluster_brokers_from_cache(broker_cache);
     let controller_id = pick_controller_id(sdm).await;
+
+    // Only populate authorized operations when the client asked for them; the
+    // "not requested" sentinel is i32::MIN.
+    let authorized_operations = if req.include_cluster_authorized_operations {
+        ALL_OPERATIONS_AUTHORIZED
+    } else {
+        i32::MIN
+    };
 
     let resp = DescribeClusterResponse::default()
         .with_endpoint_type(ENDPOINT_TYPE_BROKERS)
         .with_cluster_id(StrBytes::from(broker_config().cluster_name.clone()))
         .with_controller_id(controller_id.into())
         .with_brokers(brokers)
-        .with_cluster_authorized_operations(ALL_OPERATIONS_AUTHORIZED);
+        .with_cluster_authorized_operations(authorized_operations);
 
     Some(KafkaPacket::DescribeClusterResponse(resp))
 }
@@ -130,7 +138,7 @@ pub fn process_describe_topic_partitions(
                     .with_name(name)
                     .with_is_internal(false)
                     .with_partitions(vec![])
-                    .with_topic_authorized_operations(ALL_OPERATIONS_AUTHORIZED),
+                    .with_topic_authorized_operations(i32::MIN),
                 Some(topic) => {
                     let partitions = range
                         .map(|i| describe_topic_partition(i as i32, topic, sdm))
@@ -141,7 +149,7 @@ pub fn process_describe_topic_partitions(
                         .with_name(name)
                         .with_is_internal(topic.source == TopicSource::SystemInner)
                         .with_partitions(partitions)
-                        .with_topic_authorized_operations(ALL_OPERATIONS_AUTHORIZED)
+                        .with_topic_authorized_operations(i32::MIN)
                 }
             }
         })
@@ -312,6 +320,10 @@ fn describe_topic_partition(
         .with_replica_nodes(state.replica_nodes.into_iter().map(Into::into).collect())
         .with_isr_nodes(state.isr_nodes.into_iter().map(Into::into).collect())
         .with_offline_replicas(vec![])
+        // ELR fields (KIP-966): empty rather than null — clients call
+        // `.stream()` on them and NPE if they are absent.
+        .with_eligible_leader_replicas(Some(vec![]))
+        .with_last_known_elr(Some(vec![]))
 }
 
 fn paginate_topic_partitions(
