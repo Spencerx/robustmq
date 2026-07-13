@@ -92,7 +92,7 @@ impl Command for KafkaHandlerCommand {
         let resp_packet = match &wrapper.packet {
             // Core Data Plane
             KafkaPacket::ProduceReq(req) => {
-                produce::process_produce(&self.storage_driver_manager, req).await
+                produce::process_produce(&self.storage_driver_manager, &self.kafka_cache, req).await
             }
             KafkaPacket::FetchReq(req) => {
                 fetch::process_fetch(&self.storage_driver_manager, req).await
@@ -113,7 +113,12 @@ impl Command for KafkaHandlerCommand {
                 consumer_group_offset::process_offset_fetch(&self.storage_driver_manager, req).await
             }
             KafkaPacket::FindCoordinatorReq(req) => {
-                consumer_group::process_find_coordinator(&self.storage_driver_manager, req).await
+                consumer_group::process_find_coordinator(
+                    &self.storage_driver_manager,
+                    wrapper.api_version,
+                    req,
+                )
+                .await
             }
             KafkaPacket::JoinGroupReq(req) => {
                 let client_id = match &wrapper.header {
@@ -211,7 +216,9 @@ impl Command for KafkaHandlerCommand {
                 config::process_incremental_alter_configs(&self.storage_driver_manager, req).await
             }
             // Transaction Support
-            KafkaPacket::InitProducerIdReq(req) => transaction::process_init_producer_id(req),
+            KafkaPacket::InitProducerIdReq(req) => {
+                transaction::process_init_producer_id(&self.kafka_cache, req)
+            }
             KafkaPacket::AddPartitionsToTxnReq(req) => {
                 transaction::process_add_partitions_to_txn(req)
             }

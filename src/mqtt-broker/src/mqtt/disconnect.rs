@@ -32,19 +32,16 @@ impl MqttService {
         disconnect: &Disconnect,
         disconnect_properties: &Option<DisconnectProperties>,
     ) -> Option<MqttPacket> {
-        let session = {
-            let session = self.cache_manager.get_session_info(&connection.client_id)?;
-            st_report_disconnected_event(
-                &self.event_manager,
-                &self.connection_manager,
-                connection.connect_id,
-                connection,
-                &session,
-                disconnect.reason_code,
-            )
-            .await;
-            session
-        };
+        let session = self.cache_manager.get_session_info(&connection.client_id)?;
+        st_report_disconnected_event(
+            &self.event_manager,
+            &self.connection_manager,
+            connection.connect_id,
+            connection,
+            &session,
+            disconnect.reason_code,
+        )
+        .await;
 
         if let Err(e) = disconnect_connection(DisconnectConnectionContext {
             cache_manager: self.cache_manager.clone(),

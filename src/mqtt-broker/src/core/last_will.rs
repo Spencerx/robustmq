@@ -150,11 +150,7 @@ pub async fn save_last_will_message(
 }
 
 pub fn last_will_delay_interval(last_will_properties: &Option<LastWillProperties>) -> Option<u64> {
-    let delay_interval = {
-        let properties = last_will_properties.clone()?;
-        properties.delay_interval?
-    };
-
+    let delay_interval = last_will_properties.clone()?.delay_interval?;
     Some(delay_interval as u64)
 }
 

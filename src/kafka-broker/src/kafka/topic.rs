@@ -223,11 +223,27 @@ async fn create_one_topic(
     )
     .await
     {
-        Ok(()) => CreatableTopicResult::default()
-            .with_name(creatable.name.clone())
-            .with_error_code(0)
-            .with_num_partitions(partition as i32)
-            .with_replication_factor(replication as i16),
+        Ok(()) => {
+            // Make the topic-level configs the client passed at creation visible
+            // to DescribeConfigs (they're already applied to the engine config).
+            let requested: std::collections::HashMap<String, String> = creatable
+                .configs
+                .iter()
+                .filter_map(|c| {
+                    c.value
+                        .as_ref()
+                        .map(|v| (c.name.to_string(), v.to_string()))
+                })
+                .collect();
+            if !requested.is_empty() {
+                crate::kafka::config::store_topic_configs(sdm, &topic_name, &requested).await;
+            }
+            CreatableTopicResult::default()
+                .with_name(creatable.name.clone())
+                .with_error_code(0)
+                .with_num_partitions(partition as i32)
+                .with_replication_factor(replication as i16)
+        }
         Err(e) => {
             warn!("Kafka CreateTopics failed for {}: {}", topic_name, e);
             topic_error(creatable.name.clone(), ResponseError::UnknownServerError)
@@ -339,6 +355,7 @@ async fn delete_records_for_topic(
     };
 
     let mut targets = std::collections::HashMap::with_capacity(t.partitions.len());
+    let mut out_of_range = std::collections::HashSet::new();
     for p in &t.partitions {
         let partition = p.partition_index as u32;
         let Some(detail) = shards.get(&partition) else {
@@ -351,6 +368,12 @@ async fn delete_records_for_topic(
         } else {
             p.offset as u64
         };
+        // Kafka rejects deleting past the high watermark: the storage layer would
+        // silently clamp to the HW, but the client expects OFFSET_OUT_OF_RANGE.
+        if target > detail.offset.high_watermark {
+            out_of_range.insert(partition);
+            continue;
+        }
         targets.insert(partition, target);
     }
 
@@ -376,7 +399,9 @@ async fn delete_records_for_topic(
                     .with_low_watermark(-1)
                     .with_error_code(ResponseError::UnknownTopicOrPartition.code());
             }
-            if p.offset < 0 && p.offset != DELETE_RECORDS_HIGH_WATERMARK {
+            if (p.offset < 0 && p.offset != DELETE_RECORDS_HIGH_WATERMARK)
+                || out_of_range.contains(&partition)
+            {
                 return DeleteRecordsPartitionResult::default()
                     .with_partition_index(p.partition_index)
                     .with_low_watermark(-1)
