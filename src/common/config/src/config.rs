@@ -786,6 +786,11 @@ fn default_kafka_max_fetch_bytes() -> u32 {
     4 * 1024 * 1024
 }
 
+fn default_kafka_max_message_bytes() -> u32 {
+    // Kafka's default max.message.bytes (1 MiB + record-batch overhead).
+    1_048_588
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct KafkaRuntime {
     #[serde(default = "default_kafka_tcp_port")]
@@ -795,6 +800,11 @@ pub struct KafkaRuntime {
     /// `partition_max_bytes`.
     #[serde(default = "default_kafka_max_fetch_bytes")]
     pub max_fetch_bytes: u32,
+    /// Upper bound on the size of a single produced record batch. A batch larger
+    /// than this is rejected with MESSAGE_TOO_LARGE, matching Kafka's
+    /// `message.max.bytes` / topic `max.message.bytes`.
+    #[serde(default = "default_kafka_max_message_bytes")]
+    pub max_message_bytes: u32,
     /// Upper bound on how many partitions a single DescribeTopicPartitions
     /// response may return, regardless of the client's `response_partition_limit`.
     #[serde(default = "default_kafka_max_describe_topic_partitions")]
@@ -808,6 +818,7 @@ impl Default for KafkaRuntime {
         KafkaRuntime {
             tcp_port: default_kafka_tcp_port(),
             max_fetch_bytes: default_kafka_max_fetch_bytes(),
+            max_message_bytes: default_kafka_max_message_bytes(),
             max_describe_topic_partitions: default_kafka_max_describe_topic_partitions(),
             sasl: KafkaSasl::default(),
         }
@@ -838,10 +849,24 @@ fn default_kafka_sasl_mechanisms() -> Vec<String> {
     vec!["SCRAM-SHA-256".to_string(), "SCRAM-SHA-512".to_string()]
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+fn default_auto_create_topics_enable() -> bool {
+    // Match Kafka's broker default (`auto.create.topics.enable=true`); operators
+    // can turn it off via the cluster dynamic config.
+    true
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct KafkaDynamic {
-    #[serde(default)]
+    #[serde(default = "default_auto_create_topics_enable")]
     pub auto_create_topics_enable: bool,
+}
+
+impl Default for KafkaDynamic {
+    fn default() -> Self {
+        KafkaDynamic {
+            auto_create_topics_enable: default_auto_create_topics_enable(),
+        }
+    }
 }
 
 fn default_kafka_max_describe_topic_partitions() -> u32 {

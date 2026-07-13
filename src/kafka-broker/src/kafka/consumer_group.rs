@@ -38,6 +38,7 @@ use storage_adapter::driver::StorageDriverManager;
 use tracing::warn;
 
 const KEY_TYPE_GROUP: i8 = 0;
+const KEY_TYPE_TRANSACTION: i8 = 1;
 
 /// FindCoordinator restructured its response at v4 (KIP-699): v0-3 carry a
 /// single coordinator in the top-level `error_code`/`node_id`/`host`/`port`
@@ -53,7 +54,13 @@ pub async fn process_find_coordinator(
     api_version: i16,
     req: &FindCoordinatorRequest,
 ) -> Option<KafkaPacket> {
-    let resolved = if req.key_type == KEY_TYPE_GROUP {
+    // Group and transaction coordinators both live on the meta-service raft
+    // leader. We resolve it for TRANSACTION too (rather than returning a
+    // retriable CoordinatorNotAvailable, which makes clients retry until
+    // timeout) so that clients proceed to the actual transaction API and fail
+    // fast there — InitProducerId rejects a transactional_id, and the other
+    // transaction APIs aren't advertised, so both surface a clear error at once.
+    let resolved = if req.key_type == KEY_TYPE_GROUP || req.key_type == KEY_TYPE_TRANSACTION {
         resolve_group_coordinator(sdm).await
     } else {
         Err(ResponseError::CoordinatorNotAvailable.code())
@@ -98,6 +105,7 @@ pub async fn process_join_group(
     sdm: &Arc<StorageDriverManager>,
     api_version: i16,
     client_id: String,
+    client_host: String,
     req: &JoinGroupRequest,
 ) -> Option<KafkaPacket> {
     if !is_coordinator_node(sdm).await {
@@ -109,6 +117,7 @@ pub async fn process_join_group(
         member_id: req.member_id.to_string(),
         group_instance_id: req.group_instance_id.as_ref().map(|s| s.to_string()),
         client_id,
+        client_host,
         session_timeout_ms: req.session_timeout_ms,
         rebalance_timeout_ms: req.rebalance_timeout_ms,
         protocol_type: req.protocol_type.to_string(),
@@ -294,7 +303,7 @@ pub async fn process_describe_groups(
                             .with_member_id(StrBytes::from(m.member_id))
                             .with_group_instance_id(m.group_instance_id.map(StrBytes::from))
                             .with_client_id(StrBytes::from(m.client_id))
-                            .with_client_host(StrBytes::from_static_str(""))
+                            .with_client_host(StrBytes::from(m.client_host))
                             .with_member_metadata(m.member_metadata)
                             .with_member_assignment(m.member_assignment)
                     })
