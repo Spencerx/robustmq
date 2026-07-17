@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use amqp_broker::core::cache::AmqpCacheManager;
+use amqp_broker::storage::binding::BindingStorage;
+use amqp_broker::storage::exchange::ExchangeStorage;
+use amqp_broker::storage::queue::QueueStorage;
 use broker_core::cache::NodeCacheManager;
 use broker_core::cluster::ClusterStorage;
 use broker_core::dynamic_config::build_cluster_config;
@@ -67,6 +71,7 @@ pub async fn load_metadata_cache(
     schema_manager: &Arc<SchemaRegisterManager>,
     security_manager: &Arc<SecurityManager>,
     kafka_cache: &Arc<KafkaCacheManager>,
+    amqp_cache: &Arc<AmqpCacheManager>,
 ) -> ResultMqttBrokerError {
     info!("Starting to load metadata cache...");
     load_common_cache(
@@ -80,6 +85,40 @@ pub async fn load_metadata_cache(
     load_mqtt_cache(mqtt_cache_manager, security_manager, client_pool).await?;
     load_nats_cache(nats_subscribe_manager, nats_cache_manager, client_pool).await?;
     load_kafka_cache(kafka_cache, client_pool).await?;
+    load_amqp_cache(amqp_cache, client_pool).await?;
+    Ok(())
+}
+
+async fn load_amqp_cache(
+    amqp_cache: &Arc<AmqpCacheManager>,
+    client_pool: &Arc<ClientPool>,
+) -> ResultMqttBrokerError {
+    let storage = ExchangeStorage::new(client_pool.clone());
+    let exchanges = storage
+        .list_exchange_by_tenant(DEFAULT_TENANT)
+        .await
+        .map_err(|e| MqttBrokerError::CommonError(e.to_string()))?;
+    for exchange in exchanges {
+        amqp_cache.set_exchange(exchange);
+    }
+
+    let queue_storage = QueueStorage::new(client_pool.clone());
+    let queues = queue_storage
+        .list_queue_by_tenant(DEFAULT_TENANT)
+        .await
+        .map_err(|e| MqttBrokerError::CommonError(e.to_string()))?;
+    for queue in queues {
+        amqp_cache.set_queue(queue);
+    }
+
+    let binding_storage = BindingStorage::new(client_pool.clone());
+    let bindings = binding_storage
+        .list_binding_by_tenant(DEFAULT_TENANT)
+        .await
+        .map_err(|e| MqttBrokerError::CommonError(e.to_string()))?;
+    for binding in bindings {
+        amqp_cache.set_binding(binding);
+    }
     Ok(())
 }
 

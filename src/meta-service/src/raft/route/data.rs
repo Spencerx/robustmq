@@ -69,6 +69,14 @@ pub enum StorageDataType {
     KafkaSetScram,
     KafkaDeleteScram,
 
+    // AMQP
+    AmqpSetExchange,
+    AmqpDeleteExchange,
+    AmqpSetQueue,
+    AmqpDeleteQueue,
+    AmqpSetBinding,
+    AmqpDeleteBinding,
+
     // StorageEngine
     StorageEngineSetShard,
     StorageEngineDeleteShard,
@@ -143,6 +151,13 @@ impl fmt::Display for StorageDataType {
             StorageDataType::KafkaDeleteDelegationToken => {
                 write!(f, "KafkaDeleteDelegationToken")
             }
+
+            StorageDataType::AmqpSetExchange => write!(f, "AmqpSetExchange"),
+            StorageDataType::AmqpDeleteExchange => write!(f, "AmqpDeleteExchange"),
+            StorageDataType::AmqpSetQueue => write!(f, "AmqpSetQueue"),
+            StorageDataType::AmqpDeleteQueue => write!(f, "AmqpDeleteQueue"),
+            StorageDataType::AmqpSetBinding => write!(f, "AmqpSetBinding"),
+            StorageDataType::AmqpDeleteBinding => write!(f, "AmqpDeleteBinding"),
 
             StorageDataType::StorageEngineSetShard => write!(f, "StorageEngineSetShard"),
             StorageDataType::StorageEngineDeleteShard => write!(f, "StorageEngineDeleteShard"),
