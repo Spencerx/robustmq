@@ -12,11 +12,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod basic;
-pub mod channel;
-pub mod connection;
-pub mod exchange;
-pub mod offset;
-pub mod queue;
-pub mod route;
-pub mod tx;
+pub mod basic_get_test;
+pub mod common;
